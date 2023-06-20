@@ -21,7 +21,7 @@ class ESState:
         self.lr = lr
 
     def update_perturbations(self):
-        self.perturbations = self.rng.normal(0, self.sigma, (self.population_size, self.weights_size))
+        self.perturbations = self.rng.normal(0, 1, (self.population_size, self.weights_size))
 
     def update_with_scores(self, scores):
         z_scores = (scores - np.mean(scores)) / np.std(scores)
@@ -30,7 +30,7 @@ class ESState:
         self.pivot_weights = self.pivot_weights + scaled_weight_update
 
     def get_perturbed(self, i):
-        return self.pivot_weights + self.perturbations[i]
+        return self.pivot_weights + self.sigma * self.perturbations[i]
 
 
 @ray.remote
@@ -78,8 +78,9 @@ class ESEvaluator:
                 total_loss += outputs.loss.item() * num_tokens
                 total_tokens += num_tokens
 
-        perplexity = np.exp(total_loss / total_tokens)
-        return -perplexity  # we're maximizing the goal
+        # score = -np.exp(total_loss / total_tokens)
+        score = -total_loss / total_tokens
+        return score
 
     def update_state_with_scores(self, scores):
         self.es_state.update_with_scores(scores)
@@ -133,7 +134,7 @@ def get_model_weights(model):
 
 def evolution_strategies(
     model_name, dataset_name='wikitext/wikitext-2-raw-v1', population_size=5, num_actors=2, max_epochs=5,
-    sigma=0.1, lr=0.001, max_length=64, batch_size=16,
+    sigma=0.1, lr=0.0001, max_length=64, batch_size=16,
 ):
     metric_logger = SummaryWriter()
     eval_actors = [
@@ -222,8 +223,15 @@ def print_trainable_parameters(model):
 @click.option('--max-length', default=128, type=int)
 @click.option('--top-p', default=None, type=float)
 @click.option('--max-epochs', default=5, type=int)
-def main(model, max_length, top_p, max_epochs):
-    best_weights = ray.get(evolution_strategies(model, max_epochs=max_epochs))
+@click.option('--lr', default=0.0001, type=float)
+@click.option('--batch-size', default=16, type=int)
+@click.option('--population-size', default=5, type=int)
+@click.option('--num-actors', default=2, type=int)
+def main(model, max_length, top_p, max_epochs, lr, batch_size, population_size, num_actors):
+    best_weights = ray.get(evolution_strategies(
+        model, max_epochs=max_epochs, lr=lr, batch_size=batch_size,
+        population_size=population_size, num_actors=num_actors,
+    ))
 
     # check out the best model
     print('Loading model...')
