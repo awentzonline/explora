@@ -55,7 +55,7 @@ class ESEvaluator:
     def update_perturbations(self):
         self.es_state.update_perturbations()
 
-    def evaluate(self, worker_id, max_batches=2):
+    def evaluate(self, worker_id, max_batches=None):
         if worker_id is None:
             model_weights = self.es_state.pivot_weights
         else:
@@ -134,7 +134,7 @@ def get_model_weights(model):
 
 def evolution_strategies(
     model_name, dataset_name='wikitext/wikitext-2-raw-v1', population_size=5, num_actors=2, max_epochs=5,
-    sigma=0.1, lr=0.0001, max_length=64, batch_size=16,
+    sigma=0.1, lr=0.0001, max_length=64, batch_size=16, max_batches=None
 ):
     metric_logger = SummaryWriter()
     eval_actors = [
@@ -158,7 +158,7 @@ def evolution_strategies(
 
             # evaluate the current weights on tasks
             scores = np.array(list(eval_pool.map(
-                lambda actor, i: actor.evaluate.remote(i),
+                lambda actor, i: actor.evaluate.remote(i, max_batches=max_batches),
                 range(population_size)
             )), dtype=np.single)
             # check the score of the pivot weight
@@ -227,10 +227,12 @@ def print_trainable_parameters(model):
 @click.option('--batch-size', default=16, type=int)
 @click.option('--population-size', default=5, type=int)
 @click.option('--num-actors', default=2, type=int)
-def main(model, max_length, top_p, max_epochs, lr, batch_size, population_size, num_actors):
+@click.option('--max-batches', default=None, type=int)
+def main(model, max_length, top_p, max_epochs, lr, batch_size, population_size, num_actors, max_batches):
     best_weights = ray.get(evolution_strategies(
         model, max_epochs=max_epochs, lr=lr, batch_size=batch_size,
         population_size=population_size, num_actors=num_actors,
+        max_batches=max_batches,
     ))
 
     # check out the best model
