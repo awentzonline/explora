@@ -1,0 +1,10 @@
+click
+datasets
+coverage==4.5.*
+flake8==3.7.*
+lightning
+peft
+numpy>=1.16
+ray[default]
+transformers
+torch
