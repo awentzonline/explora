@@ -37,17 +37,18 @@ class ESState:
 class ESEvaluator:
     def __init__(
         self, model_name, dataset_name, population_size, seed=42, batch_size=16, max_length=64,
-        sigma=0.1, lr=0.0001,
+        sigma=0.1, lr=0.0001, dataset_split='train',
     ):
         print('loading model...')
         self.model, self.tokenizer = get_model(model_name)
         self.model.eval()
         print('loading dataset...')
+        self.dataset_split = dataset_split
         self.dataset = HfDatasetDataModule(
             dataset_name, tokenizer=self.tokenizer, batch_size=batch_size,
             max_seq_len=max_length,
         )
-        self.dataset.setup('test')
+        self.dataset.setup('eval')
         print('loaded.')
         weights = get_model_weights(self.model)
         self.es_state = ESState(len(weights), population_size, seed, sigma=sigma, lr=lr)
@@ -66,7 +67,7 @@ class ESEvaluator:
         total_loss = 0.0
         total_tokens = 0
         with torch.no_grad():
-            data_loader = self.dataset.test_dataloader()
+            data_loader = getattr(self.dataset, f'{self.dataset_split}_dataloader')()
             for batch_i, batch in enumerate(data_loader):
                 if max_batches and max_batches <= batch_i:
                     break
@@ -162,7 +163,7 @@ def evolution_strategies(
                 range(population_size)
             )), dtype=np.single)
             # check the score of the pivot weight
-            pivot_score = ray.get(eval_actors[0].evaluate.remote(None))
+            pivot_score = ray.get(eval_actors[0].evaluate.remote(None, max_batches=max_batches))
 
             # Update state on actors
             scores_ref = ray.put(scores)
@@ -187,6 +188,8 @@ def model_repl(model, tokenizer, max_length=None, top_p=None):
     try:
         while True:
             prompt = input('prompt> ')
+            if not prompt:
+                continue
             tokens = tokenizer(prompt, return_tensors='pt')
             kwargs = {}
             if top_p:
@@ -220,6 +223,7 @@ def print_trainable_parameters(model):
 
 @click.command()
 @click.option('--model', default='gpt2')
+@click.option('--dataset-name', default='wikitext:wikitext-2-raw-v1')
 @click.option('--max-length', default=128, type=int)
 @click.option('--top-p', default=None, type=float)
 @click.option('--max-epochs', default=5, type=int)
@@ -228,11 +232,13 @@ def print_trainable_parameters(model):
 @click.option('--population-size', default=5, type=int)
 @click.option('--num-actors', default=2, type=int)
 @click.option('--max-batches', default=None, type=int)
-def main(model, max_length, top_p, max_epochs, lr, batch_size, population_size, num_actors, max_batches):
+def main(
+    model, dataset_name,
+    max_length, top_p, max_epochs, lr, batch_size, population_size, num_actors, max_batches
+):
     best_weights = ray.get(evolution_strategies(
-        model, max_epochs=max_epochs, lr=lr, batch_size=batch_size,
-        population_size=population_size, num_actors=num_actors,
-        max_batches=max_batches,
+        model, dataset_name=dataset_name, max_epochs=max_epochs, lr=lr, batch_size=batch_size,
+        population_size=population_size, num_actors=num_actors, max_batches=max_batches,
     ))
 
     # check out the best model
