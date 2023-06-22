@@ -13,7 +13,7 @@ from explora.datasets.hf_datasets import HfDatasetDataModule
 
 
 class ESState:
-    def __init__(self, weights_size, population_size, seed, init_weights=None, sigma=0.1, lr=0.0001):
+    def __init__(self, weights_size, population_size, seed, init_weights=None, sigma=0.002, lr=0.0001):
         self.rng = np.random.default_rng(seed=seed)
         self.pivot_weights = init_weights or np.zeros(weights_size)
         self.population_size = population_size
@@ -38,7 +38,7 @@ class ESState:
 class ESEvaluator:
     def __init__(
         self, model_name, dataset_name, population_size, seed=42, batch_size=16, max_length=64,
-        sigma=0.1, lr=0.0001, dataset_split='train',
+        sigma=0.002, lr=0.0001, dataset_split='train',
     ):
         seed_everything(seed)
         print('loading model...')
@@ -230,17 +230,19 @@ def print_trainable_parameters(model):
 @click.option('--top-p', default=None, type=float)
 @click.option('--max-epochs', default=5, type=int)
 @click.option('--lr', default=0.00001, type=float)
+@click.option('--sigma', default=0.00001, type=float)
 @click.option('--batch-size', default=16, type=int)
 @click.option('--population-size', default=5, type=int)
 @click.option('--num-actors', default=2, type=int)
 @click.option('--max-batches', default=None, type=int)
 def main(
     model, dataset_name,
-    max_length, top_p, max_epochs, lr, batch_size, population_size, num_actors, max_batches
+    max_length, top_p, max_epochs, lr, sigma, batch_size, population_size, num_actors, max_batches
 ):
     best_weights = ray.get(evolution_strategies(
         model, dataset_name=dataset_name, max_epochs=max_epochs, lr=lr, batch_size=batch_size,
         population_size=population_size, num_actors=num_actors, max_batches=max_batches,
+        sigma=sigma,
     ))
 
     # check out the best model
