@@ -1,4 +1,5 @@
 import click
+from lightning.pytorch import seed_everything
 import numpy as np
 from peft import LoraConfig, get_peft_model
 import ray
@@ -39,6 +40,7 @@ class ESEvaluator:
         self, model_name, dataset_name, population_size, seed=42, batch_size=16, max_length=64,
         sigma=0.1, lr=0.0001, dataset_split='train',
     ):
+        seed_everything(seed)
         print('loading model...')
         self.model, self.tokenizer = get_model(model_name)
         self.model.eval()
@@ -135,7 +137,7 @@ def get_model_weights(model):
 
 def evolution_strategies(
     model_name, dataset_name='wikitext/wikitext-2-raw-v1', population_size=5, num_actors=2, max_epochs=5,
-    sigma=0.1, lr=0.0001, max_length=64, batch_size=16, max_batches=None
+    sigma=0.0001, lr=0.0001, max_length=64, batch_size=16, max_batches=None
 ):
     metric_logger = SummaryWriter()
     eval_actors = [
@@ -227,7 +229,7 @@ def print_trainable_parameters(model):
 @click.option('--max-length', default=128, type=int)
 @click.option('--top-p', default=None, type=float)
 @click.option('--max-epochs', default=5, type=int)
-@click.option('--lr', default=0.0001, type=float)
+@click.option('--lr', default=0.00001, type=float)
 @click.option('--batch-size', default=16, type=int)
 @click.option('--population-size', default=5, type=int)
 @click.option('--num-actors', default=2, type=int)
